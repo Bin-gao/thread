@@ -2219,3 +2219,307 @@ semaphore.acquire() :  获得，假设如果已经满了，等待，等待被释
 semaphore.release()：释放，会将当前的信号量释放+1，然后唤醒等待的线程！
 
 作用：多个共享资源互斥的使用，并发限流，控制最大的线程数；
+
+### 9、读写锁
+
+ReadWriteLock
+
+![image-20220309203954458](readme.assets/image-20220309203954458.png)
+
+```java
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+/**
+ * @Auther: lbgao
+ * @Date: 2022/3/9 20:40
+ */
+
+/**
+ * 独占锁 （写锁）一次只能被一个线程占有
+ * 共享锁 （读锁）多个线程可以同时占有
+ * ReadWriteLock
+ * 读-读 可以共存
+ * 读-写 不能共存
+ * 写-写 不能共存
+ */
+public class ReadWriteLockDemo {
+    public static void main(String[] args) {
+        MyCache myCache = new MyCache();
+        MyCache2 myCache2 = new MyCache2();
+
+        //存
+        for (int i = 0; i < 6; i++) {
+            final int tmp = i;
+            new Thread(() -> {
+                myCache2.put(String.valueOf(tmp), tmp);
+            }, String.valueOf(i)).start();
+        }
+
+        //读
+        for (int i = 0; i < 6; i++) {
+            final int tmp = i;
+            new Thread(() -> {
+                myCache2.get(String.valueOf(tmp));
+            }, String.valueOf(i)).start();
+        }
+    }
+}
+
+
+/**
+ * 加锁的
+ */
+class MyCache2 {
+    private volatile Map<String,Object> map = new HashMap<>();
+    //读写锁L:更加细粒度的控制
+    private ReentrantReadWriteLock reentrantLock = new ReentrantReadWriteLock();
+    //存  写入的时候，只希望同时只有一个线程写
+    public void put (String key, Object val) {
+        reentrantLock.writeLock().lock();
+        try {
+            System.out.println(Thread.currentThread().getName() + "添加");
+            map.put(key,val);
+            System.out.println(Thread.currentThread().getName() + "添加成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }finally {
+            reentrantLock.writeLock().unlock();
+        }
+
+    }
+    //读 所有人都可以读
+    public void get (String key) {
+        reentrantLock.readLock().lock();
+
+        try {
+            System.out.println(Thread.currentThread().getName() + "查找");
+            Object o = map.get(key);
+            System.out.println(Thread.currentThread().getName() + "查找成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            reentrantLock.readLock().unlock();
+        }
+
+    }
+}
+
+/**
+ * 自定义缓存
+ */
+class MyCache {
+    private volatile Map<String,Object> map = new HashMap<>();
+
+    //存  写
+    public void put (String key, Object val) {
+        System.out.println(Thread.currentThread().getName() + "添加");
+        map.put(key,val);
+        System.out.println(Thread.currentThread().getName() + "添加成功");
+    }
+    //读 写
+    public void get (String key) {
+        System.out.println(Thread.currentThread().getName() + "查找");
+        Object o = map.get(key);
+        System.out.println(Thread.currentThread().getName() + "查找成功");
+    }
+}
+```
+
+### 10、阻塞队列
+
+![image-20220309212622374](readme.assets/image-20220309212622374.png)
+
+阻塞队列：
+
+![image-20220309212853059](readme.assets/image-20220309212853059.png)
+
+#### 10.1  BlockingQueue<E>
+
+什么情况下会使用阻塞队列：多线程并发处理，线程池！
+
+![image-20220309230125242](readme.assets/image-20220309230125242.png)
+
+**四组API**
+
+| **方式**     | 抛出异常  | 有返回值，不会抛出异常 | 阻塞等待 | 超时等待                                                     |
+| ------------ | --------- | ---------------------- | -------- | ------------------------------------------------------------ |
+| 添加         | add()     | offer()                | put()    | boolean offer(E e, long timeout, TimeUnit unit)              |
+| 移除         | remove()  | poll()                 | take()   | E poll(long timeout, TimeUnit unit)     throws InterruptedException; |
+| 判断队首元素 | element() | peek()                 |          |                                                              |
+
+```java
+/**
+     * 抛出异常
+     */
+    public static void test1 () {
+        //队列的大小
+        BlockingQueue<String> q = new ArrayBlockingQueue<>(3);// public ArrayBlockingQueue(int capacity) { this(capacity, false);}
+       
+
+        System.out.println(q.add("a"));
+        System.out.println(q.add("b"));
+        System.out.println(q.add("c"));
+
+        //java.util.IllegalStateException: Queue full
+        //System.out.println(q.add("d"));
+
+        //java.util.NoSuchElementException
+        System.out.println(q.remove());
+        System.out.println(q.remove());
+        System.out.println(q.remove());
+        System.out.println(q.remove());
+    }
+```
+
+```java
+/**
+     *  有返回值，不会抛出异常
+     */
+    public static void test2 () {
+        //队列的大小
+        BlockingQueue<String> q = new ArrayBlockingQueue<>(3);// public ArrayBlockingQueue(int capacity) {
+        //this(capacity, false);
+
+        System.out.println(q.offer("a"));
+        System.out.println(q.offer("b"));
+        System.out.println(q.offer("c"));
+
+        System.out.println(q.offer("d"));// false 不抛出异常
+
+        System.out.println(q.poll());
+        System.out.println(q.poll());
+        System.out.println(q.poll());
+        System.out.println(q.poll());// null  不抛出异常
+    }
+```
+
+```java
+/**
+     * 等待，阻塞（一直）
+     */
+    public static void test3() throws InterruptedException {
+        //队列的大小
+        BlockingQueue<String> q = new ArrayBlockingQueue<>(3);// public ArrayBlockingQueue(int capacity) {
+        //this(capacity, false);
+
+        q.put("a");
+        q.put("b");
+        q.put("c");
+        //q.put("d");//队列没有位置，会一直阻塞
+
+        System.out.println(q.take());
+        System.out.println(q.take());
+        System.out.println(q.take());
+        System.out.println(q.take());//一直阻塞
+    }
+```
+
+```java
+/**
+     * 等待， 阻塞（等待一直）
+     */
+    public static void test4() throws InterruptedException {
+        //队列的大小
+        BlockingQueue<String> q = new ArrayBlockingQueue<>(3);// public ArrayBlockingQueue(int capacity) {
+        //this(capacity, false);
+        q.offer("a");
+        q.offer("b");
+        q.offer("c");
+        q.offer("d", 1, TimeUnit.SECONDS);//超过1秒种退出
+
+        System.out.println(q.poll());
+        System.out.println(q.poll());
+        System.out.println(q.poll());
+        System.out.println(q.poll(1, TimeUnit.SECONDS));
+    }
+```
+
+#### 10.2 SynchronousQueue 同步队列
+
+没有容量
+
+进去一个元素，必须等待取出来之后，才能再往里面放一个元素！
+
+put,take（可以阻塞）
+
+```java
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * @Auther: lbgao
+ * @Date: 2022/3/9 22:44
+ */
+
+/**
+ * 同步队列
+ * 和其他的BlockingQueue 不一样 ， SynchronousQueue 不存储元素
+ * put了一个元素，必须从里面take出来，否则就不能再put了。
+ */
+public class SynchronousQueueDemo {
+    public static void main(String[] args) {
+        BlockingQueue<String> q = new SynchronousQueue<>();
+
+            new Thread(() -> {
+                try {
+                    System.out.println("put" + "1");
+                    q.put("1");
+                    System.out.println("put" + "2");
+                    q.put("2");
+                    System.out.println("put" + "3");
+                    q.put("3");
+                    System.out.println("put" + "4");
+                    q.put("4");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            },"1").start();
+
+
+
+            new Thread(() -> {
+                try {
+                    TimeUnit.SECONDS.sleep(3);
+                    System.out.println(Thread.currentThread().getName() + " " + q.take());
+                    TimeUnit.SECONDS.sleep(3);
+                    System.out.println(Thread.currentThread().getName() + " " + q.take());
+                    TimeUnit.SECONDS.sleep(3);
+                    System.out.println(Thread.currentThread().getName() + " " + q.take());
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            },"2").start();
+
+
+    }
+}
+```
+
+### 11、线程池（重点）
+
+线程池：三大方法，7大参数，4种拒绝策略；
+
+> ​	池化技术
+
+程序的运行，本质：数据结构加算法   占用系统的资源！优化资源的使用 ==> 池化技术
+
+连接池，线程池，内存池，对象池.....创建和销毁十分浪费资源
+
+池化技术：事先准备好一些资源，有人要用，就来我这里拿，用完值后还给我。享元模式
+
+**线程池的好处：**
+
+1. 降低资源的消耗；
+2. 提高响应的速度；
+3. 方便管理。
+
+==**线程复用；可以控制最大并发数；管理线程**==
+
+**把线程池比作图书馆，书籍是线程，你去图书馆结束就算是从线程池取线程，还书就是归还线程，而手动创建线程就自己去书店买书**
+
+> ​	三大方法
+
+![image-20220309232948737](readme.assets/image-20220309232948737.png)
